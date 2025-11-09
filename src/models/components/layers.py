@@ -1,4 +1,3 @@
-# /home/pipemind/sia/SIA-TP3/perceptrons/multicapa/layers.py
 import numpy as np
 
 class Layer:

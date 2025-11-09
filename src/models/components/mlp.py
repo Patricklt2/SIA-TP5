@@ -1,4 +1,3 @@
-
 import numpy as np
 from .layers import Dense
 from .loss import mse, mse_prime

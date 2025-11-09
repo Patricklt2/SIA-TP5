@@ -1,4 +1,3 @@
-# /home/pipemind/sia/SIA-TP3/perceptrons/multicapa/optimizers.py
 import numpy as np
 
 class Optimizer:

@@ -1,4 +1,3 @@
-# /home/pipemind/sia/SIA-TP3/perceptrons/multicapa/activation.py
 import numpy as np
 from .layers import Layer
 

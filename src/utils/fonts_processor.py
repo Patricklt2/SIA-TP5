@@ -55,13 +55,21 @@ def load_fonts():
 
     return patterns_binary
 
-def visualize_pattern(vector_35):
-    if vector_35.shape != (FEATURES,):
-        raise ValueError(f"Cantidad de eltos incorrecta...")
+def visualize_pattern(vector_35, title="Patron"):
+    if vector_35.ndim == 2 and vector_35.shape[1] == FEATURES:
+        vector_35 = vector_35.flatten() 
     
     matrix_7x5 = vector_35.reshape(HEIGHT, WIDTH)
     
-    return matrix_7x5
+    plt.imshow(matrix_7x5, cmap='binary', interpolation='nearest')
+    plt.title(title)
+    plt.xticks([])
+    plt.yticks([])
+    plt.show()
+
+def get_char_labels():
+    # 0x60 ('`') - 0x7F ('DEL')
+    return [chr(i) for i in range(0x60, 0x7f + 1)]
 
 # Para ver como se arman las letras no mas.. pareceria estar OK ?)
 #if __name__ == '__main__':
