@@ -114,7 +114,7 @@ class Autoencoder:
         for idx, layer in enumerate(self.all_layers):
             if isinstance(layer, Dense):
                 weights_dict[f"W_{idx}"] = layer.weights
-                weights_dict[f"b_{idx}"] = layer.biases
+                weights_dict[f"b_{idx}"] = layer.bias
         np.savez(filepath, **weights_dict)
 
     def load_weights(self, filepath):
@@ -122,7 +122,7 @@ class Autoencoder:
         for idx, layer in enumerate(self.all_layers):
             if isinstance(layer, Dense):
                 layer.weights = data[f"W_{idx}"]
-                layer.biases = data[f"b_{idx}"]
+                layer.bias = data[f"b_{idx}"]
 
     # Z               
     def encode(self, input_data):
