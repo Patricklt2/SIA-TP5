@@ -20,11 +20,7 @@ def run_basic_autoencoder():
     
     optimizer = Adam(learning_rate=LEARNING_RATE)
     ae = Autoencoder(optimizer=optimizer)
-    
-    history = ae.fit(X_train, epochs=EPOCHS, verbose=True)
-    ae.save_weights('./saved_models/ae_weights.npz')
-    # Perdida
-    plot_training_loss(history)
+    ae.load_weights('./saved_models/ae_weights_l0027248.npz')
 
     # Espacio Latente
     latent_representations = np.array([
@@ -33,12 +29,16 @@ def run_basic_autoencoder():
     plot_latent_space(latent_representations, char_labels)
 
     # Demo Reconstrucción
-    char_index = 1 # 'a'
-    X_char_a = X_train[char_index]
-    
-    _, X_prime_a = ae.forward(X_char_a.reshape(-1, 1))
-    
-    plot_reconstruction(X_char_a, X_prime_a, char_labels[char_index])
+    for i in range(len(X_train)):
+        X_original = X_train[i]
+        
+        _, X_prime = ae.forward(X_original.reshape(-1, 1))
+        
+        plot_reconstruction(
+            X_original, 
+            X_prime.flatten(), 
+            char_labels[i]
+        )
 
     # Generación de un Nuevo Patrón por Interpolación
     char1_idx = 8 # 'h'
