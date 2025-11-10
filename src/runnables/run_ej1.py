@@ -8,10 +8,10 @@ from src.utils.data_analysis import (
     plot_interpolation
 )
 from src.models.autoencoders import Autoencoder
-from src.models.components.optimizers import Adam 
+from src.models.components.optimizers import Adam
 
 LEARNING_RATE = 0.0005
-EPOCHS = 10000 
+EPOCHS = 8000 
 LATENT_DIM = 2
 
 def run_basic_autoencoder():
