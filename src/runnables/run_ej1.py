@@ -10,8 +10,8 @@ from src.utils.data_analysis import (
 from src.models.autoencoders import Autoencoder
 from src.models.components.optimizers import Adam 
 
-LEARNING_RATE = 0.01
-EPOCHS = 5000 
+LEARNING_RATE = 0.0005
+EPOCHS = 10000 
 LATENT_DIM = 2
 
 def run_basic_autoencoder():
