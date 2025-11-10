@@ -20,7 +20,10 @@ def run_basic_autoencoder():
     
     optimizer = Adam(learning_rate=LEARNING_RATE)
     ae = Autoencoder(optimizer=optimizer)
-    ae.load_weights('./saved_models/ae_weights_l0027248.npz')
+    
+    history = ae.fit(X_train, epochs=EPOCHS, verbose=True)
+    # Perdida
+    plot_training_loss(history)
 
     # Espacio Latente
     latent_representations = np.array([
