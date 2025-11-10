@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+plt.rcParams['font.family'] = 'Arial Unicode MS'
+
 # Dimensiones constantes para la visualización
 HEIGHT = 7
 WIDTH = 5
@@ -26,7 +28,7 @@ def plot_latent_space(latent_representations, char_labels, title="Representació
             xytext=(0, 10),
             ha='center'
         )
-        
+
     plt.title(title)
     plt.xlabel("Z1")
     plt.ylabel("Z2")
