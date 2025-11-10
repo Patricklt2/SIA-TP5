@@ -12,7 +12,7 @@ def plot_training_loss(history, title="Pérdida del Autoencoder (Binary Cross-En
     plt.xlabel("Época")
     plt.ylabel("Pérdida")
     plt.grid(True)
-    plt.show()
+    plt.savefig('./results/ej1/perdida_autoencoder.png')
 
 def plot_latent_space(latent_representations, char_labels, title="Representación de 32 Patrones en el Espacio Latente (Z1 vs Z2)"):
     plt.figure(figsize=(12, 10))
@@ -31,9 +31,9 @@ def plot_latent_space(latent_representations, char_labels, title="Representació
     plt.xlabel("Z1")
     plt.ylabel("Z2")
     plt.grid(True)
-    plt.show()
+    plt.savefig('./results/ej1/espacio_latente.png')
 
-def plot_reconstruction(X_original, X_prime, char_label):
+def plot_reconstruction(X_original, X_prime, char_label, title="Caracter En Reconstruccion"):
     X_prime_rounded = (X_prime.flatten() > 0.5).astype(float)
 
     fig, axes = plt.subplots(1, 2, figsize=(6, 3))
@@ -47,8 +47,9 @@ def plot_reconstruction(X_original, X_prime, char_label):
     axes[1].axis('off')
     
     plt.suptitle("Demostración de la Capacidad de Reconstrucción")
+    plt.title(title)
     plt.tight_layout(rect=[0, 0, 1, 0.9])
-    plt.show()
+    plt.savefig(f'./results/ej1/{char_label}.png')
 
 def plot_interpolation(X1_original, X2_original, X_interp_prime, char1_label, char2_label):
     X_interp_rounded = (X_interp_prime.flatten() > 0.5).astype(float)
@@ -72,4 +73,4 @@ def plot_interpolation(X1_original, X2_original, X_interp_prime, char1_label, ch
 
     plt.suptitle("Generación de un Nuevo Patrón por Interpolación Latente")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.show()
+    plt.savefig(f'./results/ej1/interpolacion_{char1_label}_{char2_label}.png')
