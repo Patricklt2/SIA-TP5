@@ -22,7 +22,7 @@ def run_basic_autoencoder():
     ae = Autoencoder(optimizer=optimizer)
     
     history = ae.fit(X_train, epochs=EPOCHS, verbose=True)
-
+    ae.save_weights('./saved_models/ae_weights.npz')
     # Perdida
     plot_training_loss(history)
 

@@ -109,6 +109,21 @@ class Autoencoder:
                     grad_w, grad_b = gradients_dict[layer_id]
                     self.optimizer.update(layer, grad_w, grad_b)
 
+    def save_weights(self, filepath):
+        weights_dict = {}
+        for idx, layer in enumerate(self.all_layers):
+            if isinstance(layer, Dense):
+                weights_dict[f"W_{idx}"] = layer.weights
+                weights_dict[f"b_{idx}"] = layer.biases
+        np.savez(filepath, **weights_dict)
+
+    def load_weights(self, filepath):
+        data = np.load(filepath)
+        for idx, layer in enumerate(self.all_layers):
+            if isinstance(layer, Dense):
+                layer.weights = data[f"W_{idx}"]
+                layer.biases = data[f"b_{idx}"]
+
     # Z               
     def encode(self, input_data):
         return self.encoder.forward(input_data)
