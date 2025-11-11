@@ -10,8 +10,8 @@ from src.utils.data_analysis import (
 from src.models.autoencoders import Autoencoder
 from src.models.components.optimizers import Adam
 
-LEARNING_RATE = 0.0005
-EPOCHS = 8000 
+LEARNING_RATE = 0.00082
+EPOCHS = 9000 
 LATENT_DIM = 2
 
 def run_basic_autoencoder():
@@ -22,6 +22,9 @@ def run_basic_autoencoder():
     ae = Autoencoder(optimizer=optimizer)
     
     history = ae.fit(X_train, epochs=EPOCHS, verbose=True)
+    
+    # ae.load_weights('./saved_models/ae_weights_l0008915.npz')
+    # ae.load_weights('./saved_models/ae_weights_l0008915.npz')
     # Perdida
     plot_training_loss(history)
 
