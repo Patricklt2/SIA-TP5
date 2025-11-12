@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os 
 
 # Dimensiones constantes para la visualización
 HEIGHT = 7
@@ -74,3 +75,35 @@ def plot_interpolation(X1_original, X2_original, X_interp_prime, char1_label, ch
     plt.suptitle("Generación de un Nuevo Patrón por Interpolación Latente")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(f'./results/ej1/interpolacion_{char1_label}_{char2_label}.png')
+
+def plot_denoising_comparison(X_original, X_noisy, X_reconstructed, char_label, noise_level):
+    X_reconstructed_rounded = (X_reconstructed.flatten() > 0.5).astype(float)
+
+    fig, axes = plt.subplots(1, 3, figsize=(9, 4))
+    
+    noise_percent = int(noise_level * 100)
+    plt.suptitle(f"Capacidad de Denoising (Red entrenada con {noise_percent}%)")
+
+    axes[0].imshow(X_original.reshape(HEIGHT, WIDTH), cmap='binary', interpolation='nearest')
+    axes[0].set_title(f"Original ('{char_label}')")
+    axes[0].axis('off')
+
+    axes[1].imshow(X_noisy.reshape(HEIGHT, WIDTH), cmap='binary', interpolation='nearest')
+    axes[1].set_title(f"Entrada Ruidosa ({noise_percent}%)")
+    axes[1].axis('off')
+
+    axes[2].imshow(X_reconstructed_rounded.reshape(HEIGHT, WIDTH), cmap='binary', interpolation='nearest') 
+    axes[2].set_title(f"Reconstrucción (Limpia)")
+    axes[2].axis('off')
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.9])
+
+    save_dir = f'./results/ej1/ruido_{noise_percent}_porciento'
+    os.makedirs(save_dir, exist_ok=True)
+
+    safe_char_label = "".join(c for c in char_label if c.isalnum())
+    if not safe_char_label:
+        safe_char_label = f"char_{ord(char_label)}"
+
+    plt.savefig(os.path.join(save_dir, f'denoising_{safe_char_label}.png'))
+    plt.close(fig)

@@ -8,14 +8,19 @@ from src.models.components.loss import bce, bce_prime
 INPUT_DIM = 35    # 5 * 7 features, da el tamaño de la capa de entrada
 LATENT_DIM = 2
 HIDDEN_DIM = 16
-
+HIDDEN_DIM_DAE = 32
 class Autoencoder:
-    def __init__(self, optimizer):
+    def __init__(self, optimizer, dae=False):
         # 35 -> 16 -> 2 (layers del encoder)
+        if dae is True:
+            hd = HIDDEN_DIM_DAE
+        else:
+            hd = HIDDEN_DIM
+
         encoder_layers = [
-            Dense(INPUT_DIM, HIDDEN_DIM),
+            Dense(INPUT_DIM, hd),
             Tanh(),
-            Dense(HIDDEN_DIM, LATENT_DIM),
+            Dense(hd, LATENT_DIM),
             Tanh()
         ]
 
@@ -23,9 +28,9 @@ class Autoencoder:
 
         # 2 -> 16 -> 35 (layers invertidas con respecto al encoder) para poder decodificar
         decoder_layers = [
-            Dense(LATENT_DIM, HIDDEN_DIM),
+            Dense(LATENT_DIM, hd),
             Tanh(),
-            Dense(HIDDEN_DIM, INPUT_DIM),
+            Dense(hd, INPUT_DIM),
             Sigmoid() # Salida entre 0 y 1 :)
         ]
         self.decoder = MLP(decoder_layers, None, None, optimizer)
@@ -86,6 +91,43 @@ class Autoencoder:
         
         return history
 
+    def fit_dae(self, X_train, epochs=1000, verbose=True, noise_level=0.0):
+        history = []
+        num_patterns = len(X_train)
+
+        for epoch in range(epochs):
+            epoch_loss = 0
+            
+            for i in range(num_patterns):
+                X_clean = X_train[i].reshape(-1, 1)
+
+                # Version con ruido
+                X_noisy = self._add_noise(X_clean, noise_level)
+
+                # Forward
+                Z, X_prime = self.forward(X_noisy)
+
+                loss_value = self.loss(X_clean, X_prime)
+                epoch_loss += loss_value
+
+                # Gradient
+                grad_loss = self.loss_prime(X_clean, X_prime)
+
+                decoder_gradients_dict, grad_z = self._full_backward_pass(self.decoder, grad_loss)
+                encoder_gradients_dict, _ = self._full_backward_pass(self.encoder, grad_z)
+
+                self._update_weights(encoder_gradients_dict)
+                self._update_weights(decoder_gradients_dict)
+
+
+            avg_loss = epoch_loss / num_patterns
+            history.append(avg_loss)
+
+            if verbose and (epoch + 1) % 100 == 0:
+                print(f"Época {epoch + 1}/{epochs} - Pérdida: {avg_loss:.6f} (Noise: {noise_level*100}%)")
+        
+        return history
+
     def _full_backward_pass(self, mlp_instance, initial_gradient):
         grad = initial_gradient
         layer_gradients = {}
@@ -131,3 +173,27 @@ class Autoencoder:
     # X'
     def decode(self, latent_z):
         return self.decoder.forward(latent_z)
+    
+    def _add_noise(self, X, noise_level=0.2):
+        X_noisy = X.copy()
+        X_flat = X_noisy.flatten()
+        
+        white_pixel_indices = np.where(X_flat == 0)[0]
+        
+        if len(white_pixel_indices) == 0:
+            return X_noisy 
+        
+        num_to_flip = int(noise_level * len(white_pixel_indices))
+        
+        if num_to_flip == 0:
+            return X_noisy
+            
+        flip_indices = np.random.choice(
+            white_pixel_indices, 
+            size=num_to_flip, 
+            replace=False
+        )
+        
+        X_flat[flip_indices] = 1
+        
+        return X_flat.reshape(X.shape)
