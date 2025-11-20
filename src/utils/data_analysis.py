@@ -1,19 +1,22 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os 
+from matplotlib import gridspec
 
 # Dimensiones constantes para la visualización
 HEIGHT = 7
 WIDTH = 5
 
-def plot_training_loss(history, title="Pérdida del Autoencoder (Binary Cross-Entropy)"):
+def plot_training_loss(history, title="Pérdida del Autoencoder (Binary Cross-Entropy)", save_path='./results/ej1/perdida_autoencoder.png'):
     plt.figure(figsize=(10, 5))
     plt.plot(history)
     plt.title(title)
     plt.xlabel("Época")
     plt.ylabel("Pérdida")
     plt.grid(True)
-    plt.savefig('./results/ej1/perdida_autoencoder.png')
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
 
 def plot_latent_space(latent_representations, char_labels, title="Representación de 32 Patrones en el Espacio Latente (Z1 vs Z2)"):
     plt.figure(figsize=(12, 10))
@@ -106,4 +109,72 @@ def plot_denoising_comparison(X_original, X_noisy, X_reconstructed, char_label, 
         safe_char_label = f"char_{ord(char_label)}"
 
     plt.savefig(os.path.join(save_dir, f'denoising_{safe_char_label}.png'))
+    plt.close(fig)
+
+
+def plot_latent_space_generic(latent_representations, labels=None, title="VAE Latent Space", save_path='./results/ej2/latent_space.png'):
+    plt.figure(figsize=(10, 8))
+    plt.scatter(latent_representations[:, 0], latent_representations[:, 1], c='tab:blue', alpha=0.6)
+
+    if labels is not None:
+        for (x, y), label in zip(latent_representations, labels):
+            plt.annotate(label, (x, y), textcoords="offset points", xytext=(0, 6), ha='center', fontsize=8)
+
+    plt.title(title)
+    plt.xlabel("z1")
+    plt.ylabel("z2")
+    plt.grid(True, linestyle='--', alpha=0.4)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+
+
+def _reshape_batch(batch, image_shape):
+    h, w = image_shape
+    return [sample.reshape(h, w) for sample in batch]
+
+
+def plot_vae_reconstructions(originals, reconstructions, image_shape, save_path='./results/ej2/reconstructions.png', max_items=8, title="Reconstrucciones VAE"):
+    num_items = min(max_items, len(originals), len(reconstructions))
+    originals_reshaped = _reshape_batch(originals[:num_items], image_shape)
+    recon_reshaped = _reshape_batch(reconstructions[:num_items], image_shape)
+
+    fig, axes = plt.subplots(num_items, 2, figsize=(4, num_items * 2))
+    if num_items == 1:
+        axes = np.array([axes])
+
+    for idx in range(num_items):
+        axes[idx, 0].imshow(originals_reshaped[idx], cmap='binary', interpolation='nearest')
+        axes[idx, 0].set_title('Original')
+        axes[idx, 0].axis('off')
+
+        axes[idx, 1].imshow(recon_reshaped[idx], cmap='binary', interpolation='nearest')
+        axes[idx, 1].set_title('Reconstrucción')
+        axes[idx, 1].axis('off')
+
+    plt.suptitle(title)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
+    plt.close(fig)
+
+
+def plot_vae_generation_grid(samples, image_shape, grid_size=(5, 5), save_path='./results/ej2/generated_grid.png', title="Samples from Latent Grid"):
+    rows, cols = grid_size
+    total_cells = rows * cols
+    samples = samples[:total_cells]
+    reshaped_samples = _reshape_batch(samples, image_shape)
+
+    fig = plt.figure(figsize=(cols * 1.5, rows * 1.5))
+    gs = gridspec.GridSpec(rows, cols)
+
+    for idx, sample in enumerate(reshaped_samples):
+        ax = fig.add_subplot(gs[idx])
+        ax.imshow(sample, cmap='binary', interpolation='nearest')
+        ax.axis('off')
+
+    plt.suptitle(title)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
     plt.close(fig)
