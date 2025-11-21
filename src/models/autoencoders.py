@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 from src.models.components.mlp import MLP
@@ -18,6 +19,14 @@ def _merge_gradient_dict(base_dict, new_dict):
             base_dict[layer_id] = (prev_w + grad_w, prev_b + grad_b)
         else:
             base_dict[layer_id] = (grad_w, grad_b)
+
+
+def _scale_gradient_dict(gradient_dict, scale):
+    if scale == 0:
+        return gradient_dict
+    for layer_id, (grad_w, grad_b) in gradient_dict.items():
+        gradient_dict[layer_id] = (grad_w / scale, grad_b / scale)
+    return gradient_dict
 class Autoencoder:
     def __init__(self, optimizer, dae=False):
         # 35 -> 16 -> 2 (layers del encoder)
@@ -228,6 +237,7 @@ class VariationalAutoencoder:
         self.decoder = MLP(self._build_mlp_layers(latent_dim, decoder_dims, output_dim=input_dim, final_activation=Sigmoid()), None, None, optimizer)
 
         self.trainable_layers = self.encoder.layers + [self.mu_layer, self.logvar_layer] + self.decoder.layers
+        self._dense_layers = [layer for layer in self.trainable_layers if isinstance(layer, Dense)]
 
     def _build_mlp_layers(self, input_size, hidden_dims, output_dim=None, final_activation=None):
         layers = []
@@ -272,32 +282,90 @@ class VariationalAutoencoder:
         }
         return z, cache
 
-    def fit(self, X_train, epochs=1000, verbose=True, beta=None, shuffle=True):
-        if beta is not None:
+    def fit(
+        self,
+        X_train,
+        epochs=1000,
+        verbose=True,
+        beta=None,
+        shuffle=True,
+        checkpoint_path=None,
+        checkpoint_interval=100,
+        start_epoch=0,
+        history=None,
+        batch_size=32,
+        beta_start=None,
+        beta_end=None,
+        beta_anneal_epochs=0,
+    ):
+        beta_schedule = (
+            beta_start is not None
+            and beta_end is not None
+            and beta_anneal_epochs > 0
+        )
+
+        if beta_schedule:
+            self.beta = beta_start
+        elif beta is not None:
             self.beta = beta
 
-        history = []
-        num_samples = len(X_train)
+        if history is None:
+            history = []
 
-        for epoch in range(epochs):
+        num_samples = len(X_train)
+        total_epochs = start_epoch + epochs
+        batch_size = max(1, batch_size)
+
+        for epoch_idx in range(start_epoch, total_epochs):
+            epoch_number = epoch_idx + 1
+            if beta_schedule:
+                progress = min(epoch_number / beta_anneal_epochs, 1.0)
+                self.beta = beta_start + (beta_end - beta_start) * progress
+
             epoch_loss = 0.0
+            epoch_recon = 0.0
+            epoch_kl = 0.0
+
             indices = np.arange(num_samples)
             if shuffle:
                 np.random.shuffle(indices)
 
-            for idx in indices:
-                x = X_train[idx].reshape(-1, 1)
-                _, cache = self._forward_pass(x)
-                loss_value, _ = self._compute_losses(cache)
-                epoch_loss += loss_value
+            for start_idx in range(0, num_samples, batch_size):
+                batch_indices = indices[start_idx:start_idx + batch_size]
+                if len(batch_indices) == 0:
+                    continue
+                batch_gradients = {}
 
-                gradients = self._backward_pass(cache)
-                self._update_weights(gradients)
+                for idx in batch_indices:
+                    x = X_train[idx].reshape(-1, 1)
+                    _, cache = self._forward_pass(x)
+                    loss_value, (recon_loss, kl_loss) = self._compute_losses(cache)
+                    epoch_loss += loss_value
+                    epoch_recon += recon_loss
+                    epoch_kl += kl_loss
 
-            history.append(epoch_loss / num_samples)
+                    gradients = self._backward_pass(cache)
+                    _merge_gradient_dict(batch_gradients, gradients)
 
-            if verbose and (epoch + 1) % 100 == 0:
-                print(f"Época {epoch + 1}/{epochs} - Pérdida total: {history[-1]:.6f}")
+                _scale_gradient_dict(batch_gradients, len(batch_indices))
+                self._update_weights(batch_gradients)
+
+            avg_epoch_loss = epoch_loss / num_samples
+            avg_recon = epoch_recon / num_samples
+            avg_kl = epoch_kl / num_samples
+            history.append(avg_epoch_loss)
+
+            if verbose:
+                print(
+                    f"[VAE] Época {epoch_number}/{total_epochs} - Pérdida: {avg_epoch_loss:.6f} "
+                    f"(Recon: {avg_recon:.6f}, KL: {avg_kl:.6f}, beta: {self.beta:.3f})"
+                )
+
+            if (
+                checkpoint_path
+                and ((epoch_number) % checkpoint_interval == 0 or epoch_number == total_epochs)
+            ):
+                self.save_checkpoint(checkpoint_path, epoch_number, history)
 
         return history
 
@@ -394,3 +462,32 @@ class VariationalAutoencoder:
                 decoded = self.decode(z)
                 grid_samples.append(decoded.flatten())
         return np.array(grid_samples)
+
+    def save_checkpoint(self, filepath, epoch, history):
+        directory = os.path.dirname(filepath)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+
+        payload = {
+            'epoch': np.array(epoch, dtype=np.int64),
+            'history': np.array(history, dtype=np.float32),
+        }
+
+        for idx, layer in enumerate(self._dense_layers):
+            payload[f'W_{idx}'] = layer.weights
+            payload[f'b_{idx}'] = layer.bias
+
+        np.savez(filepath, **payload)
+
+    def load_checkpoint(self, filepath):
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"No se encontró el checkpoint en {filepath}")
+
+        data = np.load(filepath, allow_pickle=True)
+        for idx, layer in enumerate(self._dense_layers):
+            layer.weights = data[f'W_{idx}']
+            layer.bias = data[f'b_{idx}']
+
+        epoch = int(data['epoch']) if 'epoch' in data.files else 0
+        history = data['history'].tolist() if 'history' in data.files else []
+        return epoch, history

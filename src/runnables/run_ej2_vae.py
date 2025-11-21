@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -21,11 +22,15 @@ from src.utils.data_analysis import (
     plot_vae_reconstructions,
 )
 
-LEARNING_RATE = 0.001
-EPOCHS = 1500
+LEARNING_RATE = 0.003
+EPOCHS = 400
 LATENT_DIM = 2
-BETA = 1.0
+BETA = 0.5
 RESULTS_DIR = './results/ej2'
+CHECKPOINT_PATH = './saved_models/emoji_vae_quick_checkpoint.npz'
+CHECKPOINT_INTERVAL = 10
+MAX_TRAIN_SAMPLES = 600
+MAX_TEST_SAMPLES = 600
 
 
 def _get_latent_points(vae, dataset, max_points=200):
@@ -42,20 +47,46 @@ def run_emoji_vae():
     if x_test is None:
         x_test = x_train
 
-    #x_train = x_train[:400]
-    #x_test = x_test[:400]
+    original_train = len(x_train)
+    original_test = len(x_test)
+    if MAX_TRAIN_SAMPLES is not None:
+        x_train = x_train[:MAX_TRAIN_SAMPLES]
+    if MAX_TEST_SAMPLES is not None:
+        x_test = x_test[:MAX_TEST_SAMPLES]
+
+    print(f"[VAE] Dataset -> train: {len(x_train)}/{original_train}, test: {len(x_test)}/{original_test}")
+    print(f"[VAE] Hiperparámetros -> epochs: {EPOCHS}, lr: {LEARNING_RATE}, beta: {BETA}")
 
     optimizer = Adam(learning_rate=LEARNING_RATE)
     vae = VariationalAutoencoder(
         input_dim=x_train.shape[1],
         latent_dim=LATENT_DIM,
         optimizer=optimizer,
-        encoder_dims=(256, 128),
-        decoder_dims=(128, 256),
+        encoder_dims=(128, 64),
+        decoder_dims=(64, 128),
         beta=BETA
     )
 
-    history = vae.fit(x_train, epochs=EPOCHS, verbose=True)
+    start_epoch = 0
+    history = []
+    if os.path.exists(CHECKPOINT_PATH):
+        print(f"[VAE] Checkpoint encontrado en {CHECKPOINT_PATH}. Reanudando...")
+        start_epoch, history = vae.load_checkpoint(CHECKPOINT_PATH)
+        print(f"[VAE] Continuando desde la época {start_epoch}.")
+
+    history = vae.fit(
+        x_train,
+        epochs=EPOCHS,
+        verbose=True,
+        checkpoint_path=CHECKPOINT_PATH,
+        checkpoint_interval=CHECKPOINT_INTERVAL,
+        start_epoch=start_epoch,
+        history=history,
+        batch_size=64,
+        beta_start=0.0,
+        beta_end=BETA,
+        beta_anneal_epochs=50,
+    )
     plot_training_loss(history, title="Emoji VAE - BCE + KL", save_path=f"{RESULTS_DIR}/vae_loss.png")
 
     latents, labels = _get_latent_points(vae, x_test, max_points=150)
