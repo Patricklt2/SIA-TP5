@@ -36,6 +36,7 @@ def plot_latent_space(latent_representations, char_labels, title="Representació
     plt.ylabel("Z2")
     plt.grid(True)
     plt.savefig('./results/ej1/espacio_latente.png')
+    plt.close()
 
 def plot_reconstruction(X_original, X_prime, char_label, title="Caracter En Reconstruccion"):
     X_prime_rounded = (X_prime.flatten() > 0.5).astype(float)
@@ -53,7 +54,14 @@ def plot_reconstruction(X_original, X_prime, char_label, title="Caracter En Reco
     plt.suptitle("Demostración de la Capacidad de Reconstrucción")
     plt.title(title)
     plt.tight_layout(rect=[0, 0, 1, 0.9])
-    plt.savefig(f'./results/ej1/{char_label}.png')
+    
+    # Sanitizar nombre de archivo para Windows
+    safe_char_label = "".join(c for c in char_label if c.isalnum() or c in (' ', '-', '_'))
+    if not safe_char_label:
+        safe_char_label = f"char_{ord(char_label)}"
+    
+    plt.savefig(f'./results/ej1/{safe_char_label}.png')
+    plt.close()
 
 def plot_interpolation(X1_original, X2_original, X_interp_prime, char1_label, char2_label):
     X_interp_rounded = (X_interp_prime.flatten() > 0.5).astype(float)
@@ -77,7 +85,17 @@ def plot_interpolation(X1_original, X2_original, X_interp_prime, char1_label, ch
 
     plt.suptitle("Generación de un Nuevo Patrón por Interpolación Latente")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(f'./results/ej1/interpolacion_{char1_label}_{char2_label}.png')
+    
+    # Sanitizar nombres de archivo para Windows
+    safe_char1 = "".join(c for c in char1_label if c.isalnum() or c in (' ', '-', '_'))
+    safe_char2 = "".join(c for c in char2_label if c.isalnum() or c in (' ', '-', '_'))
+    if not safe_char1:
+        safe_char1 = f"char_{ord(char1_label)}"
+    if not safe_char2:
+        safe_char2 = f"char_{ord(char2_label)}"
+    
+    plt.savefig(f'./results/ej1/interpolacion_{safe_char1}_{safe_char2}.png')
+    plt.close()
 
 def plot_denoising_comparison(X_original, X_noisy, X_reconstructed, char_label, noise_level):
     X_reconstructed_rounded = (X_reconstructed.flatten() > 0.5).astype(float)
