@@ -1,12 +1,13 @@
+import argparse
 import os
 import sys
 from pathlib import Path
 
+import numpy as np
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
-
-import numpy as np
 
 from src.models.autoencoders import VariationalAutoencoder
 from src.models.components.optimizers import Adam
@@ -15,6 +16,7 @@ from src.utils.emoji_processor import (
     get_default_emoji_labels,
     load_emoji_dataset,
 )
+from src.utils.photo_processor import load_photo_dataset
 from src.utils.data_analysis import (
     plot_latent_space_generic,
     plot_training_loss,
@@ -26,35 +28,136 @@ LEARNING_RATE = 0.003
 EPOCHS = 400
 LATENT_DIM = 2
 BETA = 0.5
-RESULTS_DIR = './results/ej2'
-CHECKPOINT_PATH = './saved_models/emoji_vae_quick_checkpoint.npz'
+RESULTS_BASE_DIR = Path('./results/ej2')
+CHECKPOINT_BASE_DIR = Path('./saved_models')
 CHECKPOINT_INTERVAL = 10
-MAX_TRAIN_SAMPLES = 600
-MAX_TEST_SAMPLES = 600
+DEFAULT_PHOTOS_DIR = Path('data/fotos')
+DEFAULT_PHOTO_SIZE = 28
 
 
-def _get_latent_points(vae, dataset, max_points=200):
+def parse_args():
+    parser = argparse.ArgumentParser(description="Entrena el VAE sobre emojis o fotos personalizadas")
+    parser.add_argument('--dataset', choices=['emoji', 'photos'], default='emoji', help='Dataset a utilizar')
+    return parser.parse_args()
+
+
+def _get_latent_points(vae, dataset, labels=None, max_points=200):
     take = min(max_points, len(dataset))
     latents = []
     for sample in dataset[:take]:
         mu, _ = vae.encode(sample)
         latents.append(mu.flatten())
-    return np.array(latents), get_default_emoji_labels(take)
+    label_subset = labels[:take] if labels is not None else None
+    return np.array(latents), label_subset
 
 
-def run_emoji_vae():
-    x_train, x_test = load_emoji_dataset()
-    if x_test is None:
-        x_test = x_train
+def _merge_label_lists(train_labels, test_labels, train_size, test_size):
+    if train_labels is None and test_labels is None:
+        return None
 
-    original_train = len(x_train)
-    original_test = len(x_test)
-    if MAX_TRAIN_SAMPLES is not None:
-        x_train = x_train[:MAX_TRAIN_SAMPLES]
-    if MAX_TEST_SAMPLES is not None:
-        x_test = x_test[:MAX_TEST_SAMPLES]
+    merged = []
+    if train_labels is not None:
+        merged.extend(train_labels)
+    else:
+        merged.extend([None] * train_size)
 
-    print(f"[VAE] Dataset -> train: {len(x_train)}/{original_train}, test: {len(x_test)}/{original_test}")
+    if test_labels is not None:
+        merged.extend(test_labels)
+    else:
+        merged.extend([None] * test_size)
+
+    return merged
+
+
+def _deduplicate_samples(data, labels=None, prefer_label_keys=False):
+    seen = set()
+    unique_samples = []
+
+    for idx, sample in enumerate(data):
+        label = labels[idx] if labels is not None else None
+        if prefer_label_keys and label is not None:
+            key = label
+        else:
+            key = sample.tobytes()
+
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_samples.append(sample)
+
+    if not unique_samples:
+        return data[:1]
+
+    return np.stack(unique_samples, axis=0)
+
+
+def _prepare_reconstruction_inputs(dataset_name, x_train, x_test, train_labels, test_labels):
+    recon_source = 'all' if dataset_name == 'photos' else 'test'
+    prefer_label_keys = dataset_name == 'photos'
+    max_items = None if dataset_name == 'photos' else min(16, len(x_test))
+
+    if recon_source == 'train':
+        recon_pool = x_train
+        recon_labels = train_labels
+    elif recon_source == 'all':
+        recon_pool = np.concatenate([x_train, x_test], axis=0)
+        recon_labels = _merge_label_lists(train_labels, test_labels, len(x_train), len(x_test))
+    else:
+        recon_pool = x_test
+        recon_labels = test_labels
+
+    recon_pool = _deduplicate_samples(recon_pool, recon_labels, prefer_label_keys)
+
+    if max_items is not None:
+        recon_pool = recon_pool[:max_items]
+
+    return recon_pool
+
+
+def _load_selected_dataset(args):
+    if args.dataset == 'emoji':
+        x_train, x_test = load_emoji_dataset()
+        if x_test is None:
+            x_test = x_train
+        train_labels = get_default_emoji_labels(len(x_train))
+        test_labels = get_default_emoji_labels(len(x_test))
+        image_shape = EMOJI_IMAGE_SHAPE
+        dataset_name = 'emoji'
+    else:
+        x_train, x_test, train_labels, test_labels = load_photo_dataset(
+            folder_path=str(DEFAULT_PHOTOS_DIR),
+            target_size=(DEFAULT_PHOTO_SIZE, DEFAULT_PHOTO_SIZE),
+        )
+        if x_test is None or len(x_test) == 0:
+            x_test = x_train
+            test_labels = train_labels
+        else:
+            test_labels = test_labels
+        image_shape = (DEFAULT_PHOTO_SIZE, DEFAULT_PHOTO_SIZE)
+        dataset_name = 'photos'
+
+    return {
+        'x_train': x_train,
+        'x_test': x_test,
+        'train_labels': train_labels,
+        'test_labels': test_labels,
+        'image_shape': image_shape,
+        'dataset_name': dataset_name,
+    }
+
+
+def run_vae_with_args(args):
+    dataset_info = _load_selected_dataset(args)
+    x_train = dataset_info['x_train']
+    x_test = dataset_info['x_test']
+    train_labels = dataset_info['train_labels']
+    test_labels = dataset_info['test_labels']
+    image_shape = dataset_info['image_shape']
+    dataset_name = dataset_info['dataset_name']
+
+    print(
+        f"[VAE] Dataset ({dataset_name}) -> train: {len(x_train)}, test: {len(x_test)}"
+    )
     print(f"[VAE] Hiperparámetros -> epochs: {EPOCHS}, lr: {LEARNING_RATE}, beta: {BETA}")
 
     optimizer = Adam(learning_rate=LEARNING_RATE)
@@ -67,18 +170,24 @@ def run_emoji_vae():
         beta=BETA
     )
 
+    results_dir = RESULTS_BASE_DIR / dataset_name
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_path = CHECKPOINT_BASE_DIR / f"{dataset_name}_vae_checkpoint.npz"
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
     start_epoch = 0
     history = []
-    if os.path.exists(CHECKPOINT_PATH):
-        print(f"[VAE] Checkpoint encontrado en {CHECKPOINT_PATH}. Reanudando...")
-        start_epoch, history = vae.load_checkpoint(CHECKPOINT_PATH)
+    if checkpoint_path.exists():
+        print(f"[VAE] Checkpoint encontrado en {checkpoint_path}. Reanudando...")
+        start_epoch, history = vae.load_checkpoint(checkpoint_path)
         print(f"[VAE] Continuando desde la época {start_epoch}.")
 
     history = vae.fit(
         x_train,
         epochs=EPOCHS,
         verbose=True,
-        checkpoint_path=CHECKPOINT_PATH,
+        checkpoint_path=str(checkpoint_path),
         checkpoint_interval=CHECKPOINT_INTERVAL,
         start_epoch=start_epoch,
         history=history,
@@ -87,19 +196,55 @@ def run_emoji_vae():
         beta_end=BETA,
         beta_anneal_epochs=50,
     )
-    plot_training_loss(history, title="Emoji VAE - BCE + KL", save_path=f"{RESULTS_DIR}/vae_loss.png")
 
-    latents, labels = _get_latent_points(vae, x_test, max_points=150)
-    plot_latent_space_generic(latents, labels, title="Emoji VAE Latent Space", save_path=f"{RESULTS_DIR}/latent_space.png")
+    plot_training_loss(
+        history,
+        title=f"VAE ({dataset_name}) - BCE + KL",
+        save_path=str(results_dir / 'vae_loss.png')
+    )
 
-    recon_inputs = x_test[:16]
+    latents, latent_labels = _get_latent_points(vae, x_test, labels=test_labels, max_points=150)
+    plot_latent_space_generic(
+        latents,
+        latent_labels,
+        title=f"VAE ({dataset_name}) Latent Space",
+        save_path=str(results_dir / 'latent_space.png')
+    )
+
+    recon_inputs = _prepare_reconstruction_inputs(
+        dataset_name,
+        x_train,
+        x_test,
+        train_labels,
+        test_labels,
+    )
     recon_outputs = vae.reconstruct(recon_inputs)
-    plot_vae_reconstructions(recon_inputs, recon_outputs, EMOJI_IMAGE_SHAPE, save_path=f"{RESULTS_DIR}/reconstructions.png")
+    plot_vae_reconstructions(
+        recon_inputs,
+        recon_outputs,
+        image_shape,
+        save_path=str(results_dir / 'reconstructions.png'),
+        max_items=len(recon_inputs)
+    )
 
     latent_grid = vae.latent_traversal(limits=(-3, 3), steps=6)
-    plot_vae_generation_grid(latent_grid, EMOJI_IMAGE_SHAPE, grid_size=(6, 6), save_path=f"{RESULTS_DIR}/latent_traversal.png", title="Latent Traversal Grid")
+    plot_vae_generation_grid(
+        latent_grid,
+        image_shape,
+        grid_size=(6, 6),
+        save_path=str(results_dir / 'latent_traversal.png'),
+        title="Latent Traversal Grid"
+    )
 
     random_samples = vae.sample(16)
-    plot_vae_generation_grid(random_samples, EMOJI_IMAGE_SHAPE, grid_size=(4, 4), save_path=f"{RESULTS_DIR}/random_samples.png", title="Random Emoji Samples")
+    plot_vae_generation_grid(
+        random_samples,
+        image_shape,
+        grid_size=(4, 4),
+        save_path=str(results_dir / 'random_samples.png'),
+        title="Random Samples"
+    )
+
+
 if __name__ == "__main__":
-    run_emoji_vae()
+    run_vae_with_args(parse_args())
