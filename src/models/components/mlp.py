@@ -111,3 +111,86 @@ class MLP:
                 layer.weights = data[f'weights_{i}']
                 layer.bias = data[f'bias_{i}']
         print(f"Model weights loaded from {file_path}")
+
+    def _add_noise(self, X, noise_level=0.2):
+        X_noisy = X.copy()
+        X_flat = X_noisy.flatten()
+        
+        white_pixel_indices = np.where(X_flat == 0)[0]
+        
+        if len(white_pixel_indices) == 0:
+            return X_noisy 
+        
+        num_to_flip = int(noise_level * len(white_pixel_indices))
+        
+        if num_to_flip == 0:
+            return X_noisy
+            
+        flip_indices = np.random.choice(
+            white_pixel_indices, 
+            size=num_to_flip, 
+            replace=False
+        )
+        
+        X_flat[flip_indices] = 1
+        
+        return X_flat.reshape(X.shape)
+    
+    def train_noise(self, X_train_clean, y_train_clean, epochs, batch_size=1, noise_level=0.2, verbose=True):
+        history = []
+        num_samples = len(X_train_clean)
+
+        for epoch in range(epochs):
+            epoch_loss = 0
+            permutation = np.random.permutation(num_samples)
+            X_train_shuffled = X_train_clean[permutation]
+            y_train_shuffled = y_train_clean[permutation]
+
+            for i in range(0, num_samples, batch_size):
+
+                accumulated_gradients = {
+                    id(layer): [np.zeros_like(layer.weights), np.zeros_like(layer.bias)]
+                    for layer in self.layers if isinstance(layer, Dense)
+                }
+                
+                x_batch_clean = X_train_shuffled[i:i+batch_size]
+                y_batch_target = y_train_shuffled[i:i+batch_size]
+                
+                for x_clean, y_target in zip(x_batch_clean, y_batch_target):
+                    
+                    x_clean = x_clean.reshape(-1, 1)
+                    y_target = y_target.reshape(-1, 1)
+
+                    # Entrada ruidosa
+                    x_input_noisy = self._add_noise(x_clean, noise_level)
+
+                    # Forward
+                    output = self.forward(x_input_noisy)
+
+                    # Loss
+                    epoch_loss += self.loss(y_target, output)
+
+                    # Backprop
+                    loss_gradient = self.loss_prime(y_target, output)
+                    layer_gradients = self.backward(loss_gradient)
+
+                    # Acumulo gradientes
+                    for layer_id, (grad_w, grad_b) in layer_gradients.items():
+                        accumulated_gradients[layer_id][0] += grad_w
+                        accumulated_gradients[layer_id][1] += grad_b
+
+                # Actualizo SOLO capas Dense
+                for layer in self.layers:
+                    if isinstance(layer, Dense):
+                        layer_id = id(layer)
+                        grad_w_avg = accumulated_gradients[layer_id][0] / batch_size
+                        grad_b_avg = accumulated_gradients[layer_id][1] / batch_size
+                        self.optimizer.update(layer, grad_w_avg, grad_b_avg)
+
+            epoch_loss /= num_samples
+            history.append(epoch_loss)
+
+            if verbose and (epoch + 1) % 100 == 0:
+                print(f"Época {epoch+1}/{epochs} - Pérdida (DAE): {epoch_loss:.6f}")
+
+        return history
