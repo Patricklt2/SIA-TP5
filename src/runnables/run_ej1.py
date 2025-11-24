@@ -5,7 +5,8 @@ from src.utils.data_analysis import (
     plot_training_loss,
     plot_latent_space,
     plot_reconstruction,
-    plot_interpolation
+    plot_interpolation,
+    plot_dataset_vs_generated
 )
 from src.models.autoencoders import Autoencoder
 from src.models.components.optimizers import Adam
@@ -45,6 +46,17 @@ def run_basic_autoencoder():
             X_prime.flatten(), 
             char_labels[i]
         )
+
+    # Demo Reconstrucción (collect all and show a full comparison grid)
+    originals = []
+    reconstructed = []
+    for i in range(len(X_train)):
+        X_original = X_train[i]
+        _, X_prime = ae.forward(X_original.reshape(-1, 1))
+        originals.append(X_original.flatten())
+        reconstructed.append(X_prime.flatten())
+
+    plot_dataset_vs_generated(originals, reconstructed, char_labels, title="Dataset (top) vs AE reconstructions (bottom)")
 
     # Generación de un Nuevo Patrón por Interpolación
     char1_idx = 8 # 'h'

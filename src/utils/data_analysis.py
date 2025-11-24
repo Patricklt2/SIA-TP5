@@ -196,3 +196,73 @@ def plot_vae_generation_grid(samples, image_shape, grid_size=(5, 5), save_path='
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
     plt.close(fig)
+
+def plot_dataset_vs_generated(X_originals, X_generated, labels=None, title=None, cmap='binary', max_per_row=9, save_dir='./results/ej1', prefix=None):
+    """
+    Plot and SAVE 2 x M grids of originals (top row) vs generated (bottom row).
+    Splits into multiple figures/batches when the dataset has more than max_per_row items.
+    Saves batches in save_dir with filenames using prefix or title.
+    """
+    Xo = np.asarray(X_originals)
+    Xg = np.asarray(X_generated)
+    assert Xo.shape == Xg.shape, "originals and generated must have same shape"
+
+    N = Xo.shape[0]
+    if N == 0:
+        return
+
+    vec_len = Xo.shape[1]
+
+    # Prefer project HEIGHT/WIDTH when it matches the vector length
+    try:
+        grid_shape = (HEIGHT, WIDTH) if HEIGHT * WIDTH == vec_len else None
+    except NameError:
+        grid_shape = None
+
+    if grid_shape is not None:
+        img_shape = grid_shape
+    else:
+        s = int(np.sqrt(vec_len))
+        img_shape = (s, s) if s * s == vec_len else (1, vec_len)
+
+    os.makedirs(save_dir, exist_ok=True)
+    safe_prefix = prefix or (title if title else "dataset_vs_generated")
+    safe_prefix = "".join(c for c in safe_prefix if c.isalnum() or c in (' ', '-', '_')).replace(' ', '_')
+
+    # Split into batches of at most max_per_row columns
+    for start in range(0, N, max_per_row):
+        end = min(start + max_per_row, N)
+        M = end - start
+        figsize = (max(6, M * 1.2), 4)
+        fig, axes = plt.subplots(2, M, figsize=figsize)
+        if M == 1:
+            axes = np.array([[axes[0]], [axes[1]]])
+
+        for j, idx in enumerate(range(start, end)):
+            ax_top = axes[0, j]
+            ax_bottom = axes[1, j]
+
+            top_img = Xo[idx].reshape(img_shape)
+            # Threshold generated outputs so visuals match original binary font patterns
+            bottom_img = (Xg[idx].flatten() > 0.5).astype(float).reshape(img_shape)
+
+            ax_top.imshow(top_img, cmap=cmap, aspect='auto', vmin=0, vmax=1)
+            ax_top.axis('off')
+
+            ax_bottom.imshow(bottom_img, cmap=cmap, aspect='auto', vmin=0, vmax=1)
+            ax_bottom.axis('off')
+
+            if labels is not None:
+                ax_top.set_title(labels[idx], fontsize=10)
+
+        batch_title = title
+        if N > max_per_row:
+            batch_title = f"{title or ''} (items {start+1}-{end})".strip()
+        if batch_title:
+            fig.suptitle(batch_title)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        fname = f"{safe_prefix}_{start+1:03d}-{end:03d}.png"
+        path = os.path.join(save_dir, fname)
+        plt.savefig(path)
+        plt.close(fig)

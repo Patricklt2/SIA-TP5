@@ -3,7 +3,8 @@ import numpy as np
 from src.utils.fonts_processor import load_fonts, get_char_labels
 from src.utils.data_analysis import (
     plot_training_loss,
-    plot_denoising_comparison 
+    plot_denoising_comparison,
+    plot_dataset_vs_generated
 )
 from src.models.autoencoders import Autoencoder
 from src.models.components.optimizers import Adam
@@ -43,13 +44,19 @@ def run_denoising_autoencoder():
         dae.load_weights(MODEL_SAVE_PATH)
 
     for test_noise in TEST_NOISE_LEVELS:
+        originals = []
+        reconstructed = []
         for i in range(len(X_train)):
             X_original = X_train[i].reshape(-1, 1)
-            
-            X_noisy = dae._add_noise(X_original, noise_level=test_noise) 
-            
+
+            X_noisy = dae._add_noise(X_original, noise_level=test_noise)
+
             _ , X_reconstructed = dae.forward(X_noisy)
-            
+
+            originals.append(X_original.flatten())
+            reconstructed.append(X_reconstructed.flatten())
+
+            # keep existing single-item comparison if you want
             plot_denoising_comparison(
                 X_original.flatten(),
                 X_noisy.flatten(),
@@ -57,6 +64,14 @@ def run_denoising_autoencoder():
                 char_labels[i],
                 test_noise
             )
+
+        # show a full-grid comparison for this noise level
+        plot_dataset_vs_generated(
+            originals,
+            reconstructed,
+            labels=char_labels,
+            title=f"Dataset (top) vs DAE reconstructions (bottom) — Noise {test_noise}"
+        )
 
 
 if __name__ == "__main__":
