@@ -61,12 +61,11 @@ python -m src.runnables.run_ej2_vae --dataset photos
 - `LEARNING_RATE`: 0.003
 - `EPOCHS`: 400
 - `LATENT_DIM`: 2
-- `BETA`: 0.5 (peso de la pérdida KL)
 - `CHECKPOINT_INTERVAL`: 10 (guarda checkpoint cada 10 épocas)
-- `DEFAULT_PHOTO_SIZE`: 28 (tamaño para redimensionar fotos)
+- `DEFAULT_PHOTO_SIZE`: 100 (tamaño para redimensionar fotos)
 
 **Argumentos:**
-- `--dataset`: Selecciona el dataset (`emoji` o `photos`)
+- `--dataset`: Selecciona el dataset ( `photos`)
 
 **Salidas:**
 - Checkpoints en `saved_models/{dataset}_vae_checkpoint.npz`
