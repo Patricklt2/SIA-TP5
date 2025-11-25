@@ -21,7 +21,7 @@ def _load_images_from_folder(
             continue
         path = os.path.join(folder_path, fname)
         with Image.open(path) as img:
-            img = img.convert('L').resize(target_size, Image.BILINEAR)
+            img = img.resize(target_size, Image.BILINEAR)
             arr = np.asarray(img, dtype=np.float32)
         if normalize:
             arr /= 255.0

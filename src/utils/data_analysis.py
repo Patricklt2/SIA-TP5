@@ -149,7 +149,10 @@ def plot_latent_space_generic(latent_representations, labels=None, title="VAE La
 
 def _reshape_batch(batch, image_shape):
     h, w = image_shape
-    return [sample.reshape(h, w) for sample in batch]
+    if batch[0].size == h * w * 3:
+        return [sample.reshape(h, w, 3) for sample in batch]
+    else:
+        return [sample.reshape(h, w) for sample in batch]
 
 
 def plot_vae_reconstructions(originals, reconstructions, image_shape, save_path='./results/ej2/reconstructions.png', max_items=8, title="Reconstrucciones VAE"):

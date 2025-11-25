@@ -24,15 +24,15 @@ from src.utils.data_analysis import (
     plot_vae_reconstructions,
 )
 
-LEARNING_RATE = 0.003
-EPOCHS = 400
+LEARNING_RATE = 0.00082
+EPOCHS = 50
 LATENT_DIM = 2
 BETA = 0.5
 RESULTS_BASE_DIR = Path('./results/ej2')
 CHECKPOINT_BASE_DIR = Path('./saved_models')
 CHECKPOINT_INTERVAL = 10
 DEFAULT_PHOTOS_DIR = Path('data/fotos')
-DEFAULT_PHOTO_SIZE = 28
+DEFAULT_PHOTO_SIZE = 100
 
 
 def parse_args():
@@ -46,7 +46,10 @@ def _get_latent_points(vae, dataset, labels=None, max_points=200):
     latents = []
     for sample in dataset[:take]:
         mu, _ = vae.encode(sample)
-        latents.append(mu.flatten())
+        if mu.size >= 2:
+            latents.append(mu.flatten()[:2])
+        else:
+            latents.append(mu.flatten())
     label_subset = labels[:take] if labels is not None else None
     return np.array(latents), label_subset
 
@@ -160,13 +163,23 @@ def run_vae_with_args(args):
     )
     print(f"[VAE] Hiperparámetros -> epochs: {EPOCHS}, lr: {LEARNING_RATE}, beta: {BETA}")
 
+    if args.dataset == 'photos':
+        encoder_layers = (256, 128)
+        decoder_layers = (128, 256)
+        latent_dim = LATENT_DIM
+    else:
+        encoder_layers = (128, 64)
+        decoder_layers = (64, 128)
+        latent_dim = LATENT_DIM
+    # ----------------------------------------------------
+
     optimizer = Adam(learning_rate=LEARNING_RATE)
     vae = VariationalAutoencoder(
         input_dim=x_train.shape[1],
-        latent_dim=LATENT_DIM,
+        latent_dim=latent_dim,
         optimizer=optimizer,
-        encoder_dims=(128, 64),
-        decoder_dims=(64, 128),
+        encoder_dims=encoder_layers,
+        decoder_dims=decoder_layers,
         beta=BETA
     )
 
