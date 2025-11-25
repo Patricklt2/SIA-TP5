@@ -15,7 +15,6 @@ class SGD(Optimizer):
 
     def update(self, layer, grad_weights, grad_bias):
         layer.weights -= self.learning_rate * grad_weights
-        # LA CORRECCIÓN ESTÁ AQUÍ:
         layer.bias -= self.learning_rate * grad_bias.reshape(layer.bias.shape)
 
 class Momentum(Optimizer):

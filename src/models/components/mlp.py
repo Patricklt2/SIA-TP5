@@ -112,31 +112,26 @@ class MLP:
                 layer.bias = data[f'bias_{i}']
         print(f"Model weights loaded from {file_path}")
 
-    def _add_noise(self, X, noise_level=0.2):
-        X_noisy = X.copy()
-        X_flat = X_noisy.flatten()
+    def train_noise(self, X_train_clean, y_train_clean, epochs, batch_size=1, noise_level=0.2, 
+                   noise_fn=None, verbose=True):
+        """
+        Entrena el autoencoder con ruido para denoising.
         
-        white_pixel_indices = np.where(X_flat == 0)[0]
-        
-        if len(white_pixel_indices) == 0:
-            return X_noisy 
-        
-        num_to_flip = int(noise_level * len(white_pixel_indices))
-        
-        if num_to_flip == 0:
-            return X_noisy
+        Args:
+            X_train_clean: Datos limpios de entrada
+            y_train_clean: Datos limpios objetivo (típicamente iguales a X_train_clean)
+            epochs: Número de épocas
+            batch_size: Tamaño del batch
+            noise_level: Nivel de ruido a aplicar
+            noise_fn: Función de ruido a aplicar. Si es None, usa ruido salt and pepper por defecto.
+                     La función debe tener la firma: noise_fn(X, noise_level)
+            verbose: Si True, imprime el progreso
+        """
+        # Importar función de ruido por defecto si no se proporciona una
+        if noise_fn is None:
+            from .noise import salt_and_pepper_noise
+            noise_fn = salt_and_pepper_noise
             
-        flip_indices = np.random.choice(
-            white_pixel_indices, 
-            size=num_to_flip, 
-            replace=False
-        )
-        
-        X_flat[flip_indices] = 1
-        
-        return X_flat.reshape(X.shape)
-    
-    def train_noise(self, X_train_clean, y_train_clean, epochs, batch_size=1, noise_level=0.2, verbose=True):
         history = []
         num_samples = len(X_train_clean)
 
@@ -161,8 +156,8 @@ class MLP:
                     x_clean = x_clean.reshape(-1, 1)
                     y_target = y_target.reshape(-1, 1)
 
-                    # Entrada ruidosa
-                    x_input_noisy = self._add_noise(x_clean, noise_level)
+                    # Entrada ruidosa usando la función de ruido proporcionada
+                    x_input_noisy = noise_fn(x_clean, noise_level)
 
                     # Forward
                     output = self.forward(x_input_noisy)

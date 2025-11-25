@@ -218,10 +218,9 @@ class Autoencoder:
 
 
 class VariationalAutoencoder:
-    def __init__(self, input_dim, latent_dim, optimizer, encoder_dims=(256, 128), decoder_dims=None, beta=1.0):
+    def __init__(self, input_dim, latent_dim, optimizer, encoder_dims=(256, 128), decoder_dims=None):
         self.input_dim = input_dim
         self.latent_dim = latent_dim
-        self.beta = beta
         self.optimizer = optimizer
         self.loss = bce
         self.loss_prime = bce_prime
@@ -287,28 +286,13 @@ class VariationalAutoencoder:
         X_train,
         epochs=1000,
         verbose=True,
-        beta=None,
         shuffle=True,
         checkpoint_path=None,
         checkpoint_interval=100,
         start_epoch=0,
         history=None,
         batch_size=32,
-        beta_start=None,
-        beta_end=None,
-        beta_anneal_epochs=0,
     ):
-        beta_schedule = (
-            beta_start is not None
-            and beta_end is not None
-            and beta_anneal_epochs > 0
-        )
-
-        if beta_schedule:
-            self.beta = beta_start
-        elif beta is not None:
-            self.beta = beta
-
         if history is None:
             history = []
 
@@ -318,9 +302,6 @@ class VariationalAutoencoder:
 
         for epoch_idx in range(start_epoch, total_epochs):
             epoch_number = epoch_idx + 1
-            if beta_schedule:
-                progress = min(epoch_number / beta_anneal_epochs, 1.0)
-                self.beta = beta_start + (beta_end - beta_start) * progress
 
             epoch_loss = 0.0
             epoch_recon = 0.0
@@ -358,7 +339,7 @@ class VariationalAutoencoder:
             if verbose:
                 print(
                     f"[VAE] Época {epoch_number}/{total_epochs} - Pérdida: {avg_epoch_loss:.6f} "
-                    f"(Recon: {avg_recon:.6f}, KL: {avg_kl:.6f}, beta: {self.beta:.3f})"
+                    f"(Recon: {avg_recon:.6f}, KL: {avg_kl:.6f})"
                 )
 
             if (
@@ -372,7 +353,7 @@ class VariationalAutoencoder:
     def _compute_losses(self, cache):
         recon_loss = self.loss(cache['input'], cache['reconstruction'])
         kl_loss = -0.5 * np.sum(1 + cache['log_var'] - cache['mu'] ** 2 - np.exp(cache['log_var']))
-        total_loss = recon_loss + self.beta * (kl_loss / self.input_dim)
+        total_loss = recon_loss + (kl_loss / self.input_dim)
         return total_loss, (recon_loss, kl_loss)
 
     def _backward_pass(self, cache):
@@ -385,7 +366,7 @@ class VariationalAutoencoder:
         epsilon = cache['epsilon']
         mu = cache['mu']
         log_var = cache['log_var']
-        kl_scale = self.beta / self.input_dim
+        kl_scale = 1.0 / self.input_dim
 
         grad_mu_total = grad_z + kl_scale * mu
         grad_logvar_recon = grad_z * (0.5 * std * epsilon)
