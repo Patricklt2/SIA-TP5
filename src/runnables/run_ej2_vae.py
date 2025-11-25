@@ -25,7 +25,7 @@ from src.utils.data_analysis import (
 )
 
 LEARNING_RATE = 0.00082
-EPOCHS = 200
+EPOCHS = 10
 LATENT_DIM = 2
 RESULTS_BASE_DIR = Path('./results/ej2')
 CHECKPOINT_BASE_DIR = Path('./saved_models')

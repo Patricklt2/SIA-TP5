@@ -59,4 +59,4 @@ def load_photo_dataset(
     if split_idx == 0 or split_idx == len(data):
         return data, data, labels, labels
 
-    return data[:split_idx], data[split_idx:], labels[:split_idx], labels[split_idx:]
+    return data.copy(), data.copy(), labels.copy(), labels.copy()

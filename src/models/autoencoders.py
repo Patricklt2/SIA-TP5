@@ -4,7 +4,7 @@ import numpy as np
 from src.models.components.mlp import MLP
 from src.models.components.layers import Dense
 from src.models.components.activation import Tanh, Sigmoid
-from src.models.components.loss import bce, bce_prime
+from src.models.components.loss import mse, mse_prime
 
 INPUT_DIM = 35    # 5 * 7 features, da el tamaño de la capa de entrada
 LATENT_DIM = 2
@@ -35,8 +35,8 @@ class VariationalAutoencoder:
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         self.optimizer = optimizer
-        self.loss = bce
-        self.loss_prime = bce_prime
+        self.loss = mse
+        self.loss_prime = mse_prime
 
         if decoder_dims is None:
             decoder_dims = tuple(reversed(encoder_dims))
