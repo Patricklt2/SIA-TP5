@@ -19,16 +19,3 @@ def bce_prime(y_true, y_pred):
     epsilon = 1e-15
     y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
     return ((1 - y_true) / (1 - y_pred) - y_true / y_pred) / np.size(y_true)
-
-def cce(y_true, y_pred):
-    """Categorical Cross-Entropy"""
-    epsilon = 1e-15
-    y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
-    return -np.sum(y_true * np.log(y_pred))
-
-def cce_prime(y_true, y_pred):
-    """
-    Derivada de CCE con Softmax.
-    La derivada combinada es simplemente (y_pred - y_true).
-    """
-    return y_pred - y_true

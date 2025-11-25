@@ -31,16 +31,3 @@ class Sigmoid(Activation):
             return s * (1 - s)
         super().__init__(sigmoid, sigmoid_prime)
 
-class Softmax(Layer):
-    def forward(self, input_data):
-        exps = np.exp(input_data - np.max(input_data, axis=0, keepdims=True))
-        self.output = exps / np.sum(exps, axis=0, keepdims=True)
-        return self.output
-
-    def backward(self, output_gradient):
-        return output_gradient
-
-class ReLU(Activation):
-    def __init__(self):
-        super().__init__(lambda x: np.maximum(0, x),
-                         lambda x: (x > 0).astype(float))
