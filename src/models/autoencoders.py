@@ -12,6 +12,7 @@ HIDDEN_DIM_DAE = 32
 
 
 def _merge_gradient_dict(base_dict, new_dict):
+    """Accumulate gradients in-place by summing tuples keyed by layer id."""
     for layer_id, (grad_w, grad_b) in new_dict.items():
         if layer_id in base_dict:
             prev_w, prev_b = base_dict[layer_id]
@@ -21,6 +22,7 @@ def _merge_gradient_dict(base_dict, new_dict):
 
 
 def _scale_gradient_dict(gradient_dict, scale):
+    """Divide every stored gradient tuple by the provided scale factor."""
     if scale == 0:
         return gradient_dict
     for layer_id, (grad_w, grad_b) in gradient_dict.items():
@@ -31,6 +33,21 @@ def _scale_gradient_dict(gradient_dict, scale):
 
 class VariationalAutoencoder:
     def __init__(self, input_dim, latent_dim, optimizer, encoder_dims=(256, 128), decoder_dims=None):
+        """Initialize encoder/decoder stacks, loss functions, and latent heads.
+
+        Parameters
+        ----------
+        input_dim : int
+            Flattened dimensionality of the dataset (e.g. 100x100 -> 10000).
+        latent_dim : int
+            Size of the latent representation (usually 2 for visualization).
+        optimizer : Optimizer
+            Instance of the custom Adam optimizer used for Dense layers.
+        encoder_dims : tuple(int)
+            Hidden layer widths for the encoder MLP.
+        decoder_dims : tuple(int) | None
+            Hidden layer widths for the decoder MLP (mirrors encoder by default).
+        """
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         self.optimizer = optimizer
@@ -51,6 +68,11 @@ class VariationalAutoencoder:
         self._dense_layers = [layer for layer in self.trainable_layers if isinstance(layer, Dense)]
 
     def _build_mlp_layers(self, input_size, hidden_dims, output_dim=None, final_activation=None):
+        """Build an MLP as a flat list of Dense+Activation layers.
+
+        The MLP class expects a sequential list of layer instances; this helper
+        ensures encoder/decoder construction remains consistent.
+        """
         layers = []
         prev_dim = input_size
         for hidden_dim in hidden_dims:
@@ -66,20 +88,31 @@ class VariationalAutoencoder:
         return layers
 
     def forward(self, input_data):
+        """Return only the reconstruction for convenience wrappers.
+
+        The cache is still produced internally to keep compatibility with
+        reconstruction utilities that only care about the decoded output.
+        """
         latent, cache = self._forward_pass(input_data)
         return cache['reconstruction'], cache
 
     def _forward_pass(self, input_data):
+        """Encode input, sample latent z, decode, and keep intermediates for backprop.
+
+        Implements the reparameterization trick explicitly: sample epsilon from
+        N(0, I) and scale/shift using the predicted mean and log-variance.
+        The returned cache stores everything `_backward_pass` needs.
+        """
         if input_data.ndim == 1:
             input_data = input_data.reshape(-1, 1)
 
-        hidden_representation = self.encoder.forward(input_data)
-        mu = self.mu_layer.forward(hidden_representation)
-        log_var = self.logvar_layer.forward(hidden_representation)
-        std = np.exp(0.5 * log_var)
-        epsilon = np.random.randn(*std.shape)
-        z = mu + std * epsilon
-        reconstruction = self.decoder.forward(z)
+        hidden_representation = self.encoder.forward(input_data)  # shared encoder body
+        mu = self.mu_layer.forward(hidden_representation)         # latent mean head
+        log_var = self.logvar_layer.forward(hidden_representation)  # latent log-variance head
+        std = np.exp(0.5 * log_var)                                # sigma = exp(0.5 * logvar)
+        epsilon = np.random.randn(*std.shape)                      # random noise ~ N(0, I)
+        z = mu + std * epsilon                                     # reparameterized latent
+        reconstruction = self.decoder.forward(z)                   # decode to input space
 
         cache = {
             'input': input_data,
@@ -104,6 +137,7 @@ class VariationalAutoencoder:
         recon_callback=None,
         recon_epochs=None,
     ):
+        """Train the VAE, optionally logging reconstructions for selected inputs."""
         if recon_callback is not None and recon_monitor_inputs is None:
             raise ValueError("recon_monitor_inputs must be provided when using recon_callback")
 
@@ -135,15 +169,18 @@ class VariationalAutoencoder:
 
                 for idx in batch_indices:
                     x = X_train[idx].reshape(-1, 1)
+                    # Forward pass + loss for a single sample
                     _, cache = self._forward_pass(x)
                     loss_value, (recon_loss, kl_loss) = self._compute_losses(cache)
                     epoch_loss += loss_value
                     epoch_recon += recon_loss
                     epoch_kl += kl_loss
 
+                    # Accumulate gradients for this sample
                     gradients = self._backward_pass(cache)
                     _merge_gradient_dict(batch_gradients, gradients)
 
+                # Average gradients over batch then update
                 _scale_gradient_dict(batch_gradients, len(batch_indices))
                 self._update_weights(batch_gradients)
 
@@ -166,18 +203,31 @@ class VariationalAutoencoder:
                     should_capture = True
 
                 if should_capture:
+                    # Capture reconstructions for monitoring inputs
                     reconstructions = self.reconstruct(recon_monitor_inputs)
                     recon_callback(epoch_number, reconstructions)
 
         return history
 
     def _compute_losses(self, cache):
+        """Compute reconstruction (MSE) and KL terms for a single sample.
+
+        The KL term follows the closed-form KL between q(z|x) = N(mu, sigma^2)
+        and the unit Gaussian prior. We normalize the KL by the input dimension
+        to keep both components in similar numeric ranges.
+        """
         recon_loss = self.loss(cache['input'], cache['reconstruction'])
+        # Closed-form KL divergence between q(z|x) and standard normal prior
         kl_loss = -0.5 * np.sum(1 + cache['log_var'] - cache['mu'] ** 2 - np.exp(cache['log_var']))
         total_loss = recon_loss + (kl_loss / self.input_dim)
         return total_loss, (recon_loss, kl_loss)
 
     def _backward_pass(self, cache):
+        """Backpropagate through decoder, KL terms, and encoder collecting grads.
+
+        Returns a dictionary keyed by Dense layer id so that `_update_weights`
+        can apply the optimizer step without worrying about layer ordering.
+        """
         gradients = {}
         grad_recon = self.loss_prime(cache['input'], cache['reconstruction'])
         decoder_grads, grad_z = self._full_backward_pass(self.decoder, grad_recon)
@@ -189,6 +239,7 @@ class VariationalAutoencoder:
         log_var = cache['log_var']
         kl_scale = 1.0 / self.input_dim
 
+        # KL derivatives for mu/logvar plus reconstruction signal
         grad_mu_total = grad_z + kl_scale * mu
         grad_logvar_recon = grad_z * (0.5 * std * epsilon)
         grad_logvar_total = grad_logvar_recon + kl_scale * 0.5 * (np.exp(log_var) - 1)
@@ -206,6 +257,11 @@ class VariationalAutoencoder:
         return gradients
 
     def _full_backward_pass(self, mlp_instance, initial_gradient):
+        """Traverse an MLP backwards collecting gradients for Dense layers.
+
+        Non-trainable layers (activations) simply transform the gradient,
+        whereas Dense layers also emit weight/bias gradients.
+        """
         grad = initial_gradient
         layer_gradients = {}
 
@@ -219,6 +275,7 @@ class VariationalAutoencoder:
         return layer_gradients, grad
 
     def _update_weights(self, gradients_dict):
+        """Apply optimizer step to every Dense layer that received gradients."""
         for layer in self.trainable_layers:
             if isinstance(layer, Dense):
                 layer_id = id(layer)
@@ -227,6 +284,10 @@ class VariationalAutoencoder:
                     self.optimizer.update(layer, grad_w, grad_b)
 
     def encode(self, input_data):
+        """Return latent mean/logvar for provided input sample.
+
+        Useful for visualizing latent space or computing traversal grids.
+        """
         if input_data.ndim == 1:
             input_data = input_data.reshape(-1, 1)
         hidden_representation = self.encoder.forward(input_data)
@@ -235,11 +296,13 @@ class VariationalAutoencoder:
         return mu, log_var
 
     def decode(self, latent_z):
+        """Decode a latent vector back to the input space."""
         if latent_z.ndim == 1:
             latent_z = latent_z.reshape(-1, 1)
         return self.decoder.forward(latent_z)
 
     def reconstruct(self, inputs):
+        """Decode inputs by running a full forward pass for each sample."""
         reconstructions = []
         for sample in inputs:
             reconstruction, _ = self.forward(sample.reshape(-1, 1))
@@ -247,6 +310,7 @@ class VariationalAutoencoder:
         return np.array(reconstructions)
 
     def sample(self, num_samples):
+        """Draw latent samples from N(0, I) and decode them."""
         samples = []
         for _ in range(num_samples):
             z = np.random.randn(self.latent_dim, 1)
@@ -255,6 +319,7 @@ class VariationalAutoencoder:
         return np.array(samples)
 
     def latent_traversal(self, limits=(-3, 3), steps=5):
+        """Systematically traverse a 2D latent plane for visualization."""
         z1 = np.linspace(limits[0], limits[1], steps)
         z2 = np.linspace(limits[0], limits[1], steps)
         grid_samples = []
