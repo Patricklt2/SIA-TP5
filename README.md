@@ -98,11 +98,6 @@ Abrir el notebook en VS Code y ejecutar las celdas secuencialmente.
 
 **Archivo:** `src/runnables/run_ej2_vae.py`
 
-**Ejecutar con emojis (por defecto):**
-```bash
-python -m src.runnables.run_ej2_vae --dataset emoji
-```
-
 **Ejecutar con fotos:**
 ```bash
 python -m src.runnables.run_ej2_vae --dataset photos
