@@ -25,9 +25,8 @@ from src.utils.data_analysis import (
 )
 
 LEARNING_RATE = 0.00082
-EPOCHS = 50
+EPOCHS = 200
 LATENT_DIM = 2
-BETA = 0.5
 RESULTS_BASE_DIR = Path('./results/ej2')
 CHECKPOINT_BASE_DIR = Path('./saved_models')
 CHECKPOINT_INTERVAL = 10
@@ -46,10 +45,7 @@ def _get_latent_points(vae, dataset, labels=None, max_points=200):
     latents = []
     for sample in dataset[:take]:
         mu, _ = vae.encode(sample)
-        if mu.size >= 2:
-            latents.append(mu.flatten()[:2])
-        else:
-            latents.append(mu.flatten())
+        latents.append(mu.flatten())
     label_subset = labels[:take] if labels is not None else None
     return np.array(latents), label_subset
 
@@ -161,7 +157,7 @@ def run_vae_with_args(args):
     print(
         f"[VAE] Dataset ({dataset_name}) -> train: {len(x_train)}, test: {len(x_test)}"
     )
-    print(f"[VAE] Hiperparámetros -> epochs: {EPOCHS}, lr: {LEARNING_RATE}, beta: {BETA}")
+    print(f"[VAE] Hiperparámetros -> epochs: {EPOCHS}, lr: {LEARNING_RATE}")
 
     if args.dataset == 'photos':
         encoder_layers = (256, 128)
@@ -179,8 +175,7 @@ def run_vae_with_args(args):
         latent_dim=latent_dim,
         optimizer=optimizer,
         encoder_dims=encoder_layers,
-        decoder_dims=decoder_layers,
-        beta=BETA
+        decoder_dims=decoder_layers
     )
 
     results_dir = RESULTS_BASE_DIR / dataset_name
@@ -204,10 +199,7 @@ def run_vae_with_args(args):
         checkpoint_interval=CHECKPOINT_INTERVAL,
         start_epoch=start_epoch,
         history=history,
-        batch_size=64,
-        beta_start=0.0,
-        beta_end=BETA,
-        beta_anneal_epochs=50,
+        batch_size=64
     )
 
     plot_training_loss(
