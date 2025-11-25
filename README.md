@@ -100,7 +100,7 @@ Abrir el notebook en VS Code y ejecutar las celdas secuencialmente.
 
 **Ejecutar con fotos:**
 ```bash
-python -m src.runnables.run_ej2_vae --dataset photos
+python -m src.runnables.run_ej2_vae 
 ```
 
 **Configuración:**
@@ -110,12 +110,9 @@ python -m src.runnables.run_ej2_vae --dataset photos
 - `CHECKPOINT_INTERVAL`: 10 (guarda checkpoint cada 10 épocas)
 - `DEFAULT_PHOTO_SIZE`: 100 (tamaño para redimensionar fotos)
 
-**Argumentos:**
-- `--dataset`: Selecciona el dataset ( `photos`)
 
 **Salidas:**
-- Checkpoints en `saved_models/{dataset}_vae_checkpoint.npz`
-- Resultados en `results/ej2/{dataset}/`:
+- Resultados en `results/ej2/photos/`:
   - `vae_loss.png`: Gráfico de pérdida (BCE + KL)
   - `latent_space.png`: Visualización del espacio latente
   - `reconstructions.png`: Reconstrucciones de muestras
