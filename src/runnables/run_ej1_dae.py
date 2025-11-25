@@ -15,7 +15,7 @@ from src.models.components.optimizers import Adam
 
 INPUT_DIM = 35    # 5 * 7 features
 LATENT_DIM = 2
-HIDDEN_DIM = 16
+HIDDEN_DIM = 24
 
 
 LEARNING_RATE = 0.00082
