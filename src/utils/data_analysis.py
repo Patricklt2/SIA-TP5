@@ -147,12 +147,40 @@ def plot_latent_space_generic(latent_representations, labels=None, title="VAE La
     plt.close()
 
 
-def _reshape_batch(batch, image_shape):
+def _infer_image_shape(flat_length, image_shape):
+    if image_shape is None or len(image_shape) not in (2, 3):
+        raise ValueError("image_shape must be a tuple of length 2 or 3")
+
+    if len(image_shape) == 3:
+        if np.prod(image_shape) != flat_length:
+            raise ValueError(
+                f"Provided image_shape {image_shape} does not match flattened length {flat_length}"
+            )
+        return image_shape
+
     h, w = image_shape
-    if batch[0].size == h * w * 3:
-        return [sample.reshape(h, w, 3) for sample in batch]
-    else:
-        return [sample.reshape(h, w) for sample in batch]
+    base_pixels = h * w
+    if base_pixels <= 0:
+        raise ValueError("image_shape dimensions must be positive")
+
+    if flat_length == base_pixels:
+        return (h, w)
+
+    if flat_length % base_pixels == 0:
+        channels = flat_length // base_pixels
+        return (h, w, channels)
+
+    raise ValueError(
+        f"Cannot reshape flattened length {flat_length} with base dimensions {image_shape}"
+    )
+
+
+def _reshape_batch(batch, image_shape):
+    if len(batch) == 0:
+        return []
+
+    target_shape = _infer_image_shape(batch[0].size, image_shape)
+    return [sample.reshape(target_shape) for sample in batch]
 
 
 def plot_vae_reconstructions(originals, reconstructions, image_shape, save_path='./results/ej2/reconstructions.png', max_items=8, title="Reconstrucciones VAE"):
@@ -269,3 +297,51 @@ def plot_dataset_vs_generated(X_originals, X_generated, labels=None, title=None,
         path = os.path.join(save_dir, fname)
         plt.savefig(path)
         plt.close(fig)
+
+
+def plot_vae_reconstruction_steps(
+    originals,
+    recon_steps,
+    image_shape,
+    save_path='./results/ej2/recon_steps.png',
+    title="Evolución de Reconstrucciones",
+):
+    if not recon_steps:
+        return
+
+    originals = np.asarray(originals)
+    if originals.size == 0:
+        return
+
+    epochs = [step['epoch'] for step in recon_steps]
+    recon_arrays = [np.asarray(step['reconstructions']) for step in recon_steps]
+    min_items = min(arr.shape[0] for arr in recon_arrays)
+    num_rows = min(len(originals), min_items)
+    originals = originals[:num_rows]
+    recon_arrays = [arr[:num_rows] for arr in recon_arrays]
+
+    originals_images = _reshape_batch(originals, image_shape)
+    recon_images_per_step = [_reshape_batch(arr, image_shape) for arr in recon_arrays]
+
+    num_cols = len(recon_steps) + 1
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 2.2, num_rows * 2.2))
+    if num_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for row_idx in range(num_rows):
+        axes[row_idx, 0].imshow(originals_images[row_idx], cmap='binary', interpolation='nearest')
+        axes[row_idx, 0].set_ylabel(f"Img {row_idx + 1}")
+        axes[row_idx, 0].set_title('Original')
+        axes[row_idx, 0].axis('off')
+
+        for col_idx, recon_images in enumerate(recon_images_per_step, start=1):
+            axes[row_idx, col_idx].imshow(recon_images[row_idx], cmap='binary', interpolation='nearest')
+            axes[row_idx, col_idx].axis('off')
+            if row_idx == 0:
+                axes[row_idx, col_idx].set_title(f"Epoch {epochs[col_idx - 1]}")
+
+    plt.suptitle(title)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
+    plt.close(fig)

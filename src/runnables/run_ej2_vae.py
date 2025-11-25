@@ -22,6 +22,7 @@ from src.utils.data_analysis import (
     plot_training_loss,
     plot_vae_generation_grid,
     plot_vae_reconstructions,
+    plot_vae_reconstruction_steps,
 )
 
 LEARNING_RATE = 0.00082
@@ -191,6 +192,35 @@ def run_vae_with_args(args):
         start_epoch, history = vae.load_checkpoint(checkpoint_path)
         print(f"[VAE] Continuando desde la época {start_epoch}.")
 
+    recon_inputs = _prepare_reconstruction_inputs(
+        dataset_name,
+        x_train,
+        x_test,
+        train_labels,
+        test_labels,
+    )
+    recon_monitor_inputs = recon_inputs[: min(6, len(recon_inputs))]
+    recon_steps_log = []
+
+    total_epochs = start_epoch + EPOCHS
+    if total_epochs <= 0:
+        total_epochs = start_epoch
+    capture_points = min(6, max(1, total_epochs - start_epoch))
+    recon_epoch_schedule = sorted(
+        set(
+            int(round(value))
+            for value in np.linspace(start_epoch + 1, total_epochs, capture_points)
+        )
+    ) if capture_points > 0 else []
+
+    def _record_recon(epoch, reconstructions):
+        recon_steps_log.append(
+            {
+                'epoch': epoch,
+                'reconstructions': np.array(reconstructions, copy=True),
+            }
+        )
+
     history = vae.fit(
         x_train,
         epochs=EPOCHS,
@@ -199,7 +229,10 @@ def run_vae_with_args(args):
         checkpoint_interval=CHECKPOINT_INTERVAL,
         start_epoch=start_epoch,
         history=history,
-        batch_size=64
+        batch_size=64,
+        recon_monitor_inputs=recon_monitor_inputs if len(recon_monitor_inputs) > 0 else None,
+        recon_callback=_record_recon if len(recon_monitor_inputs) > 0 else None,
+        recon_epochs=recon_epoch_schedule,
     )
 
     plot_training_loss(
@@ -216,13 +249,6 @@ def run_vae_with_args(args):
         save_path=str(results_dir / 'latent_space.png')
     )
 
-    recon_inputs = _prepare_reconstruction_inputs(
-        dataset_name,
-        x_train,
-        x_test,
-        train_labels,
-        test_labels,
-    )
     recon_outputs = vae.reconstruct(recon_inputs)
     plot_vae_reconstructions(
         recon_inputs,
@@ -231,6 +257,15 @@ def run_vae_with_args(args):
         save_path=str(results_dir / 'reconstructions.png'),
         max_items=len(recon_inputs)
     )
+
+    if recon_steps_log:
+        plot_vae_reconstruction_steps(
+            recon_monitor_inputs,
+            recon_steps_log,
+            image_shape,
+            save_path=str(results_dir / 'recon_steps.png'),
+            title="Evolución de Reconstrucciones",
+        )
 
     latent_grid = vae.latent_traversal(limits=(-3, 3), steps=6)
     plot_vae_generation_grid(

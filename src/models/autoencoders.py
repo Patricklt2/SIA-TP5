@@ -105,9 +105,19 @@ class VariationalAutoencoder:
         start_epoch=0,
         history=None,
         batch_size=32,
+        recon_monitor_inputs=None,
+        recon_callback=None,
+        recon_epochs=None,
     ):
         if history is None:
             history = []
+
+        if recon_callback is not None and recon_monitor_inputs is None:
+            raise ValueError("recon_monitor_inputs must be provided when using recon_callback")
+
+        recon_epochs_set = None
+        if recon_epochs is not None:
+            recon_epochs_set = set(int(epoch) for epoch in recon_epochs)
 
         num_samples = len(X_train)
         total_epochs = start_epoch + epochs
@@ -160,6 +170,19 @@ class VariationalAutoencoder:
                 and ((epoch_number) % checkpoint_interval == 0 or epoch_number == total_epochs)
             ):
                 self.save_checkpoint(checkpoint_path, epoch_number, history)
+
+            if recon_callback is not None and recon_monitor_inputs is not None:
+                should_capture = False
+                if recon_epochs_set is not None:
+                    should_capture = epoch_number in recon_epochs_set
+                elif checkpoint_interval:
+                    should_capture = (epoch_number % checkpoint_interval == 0) or (epoch_number == total_epochs)
+                else:
+                    should_capture = True
+
+                if should_capture:
+                    reconstructions = self.reconstruct(recon_monitor_inputs)
+                    recon_callback(epoch_number, reconstructions)
 
         return history
 
