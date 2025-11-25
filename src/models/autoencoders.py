@@ -1,4 +1,3 @@
-import os
 import numpy as np
 
 from src.models.components.mlp import MLP
@@ -100,18 +99,11 @@ class VariationalAutoencoder:
         epochs=1000,
         verbose=True,
         shuffle=True,
-        checkpoint_path=None,
-        checkpoint_interval=100,
-        start_epoch=0,
-        history=None,
         batch_size=32,
         recon_monitor_inputs=None,
         recon_callback=None,
         recon_epochs=None,
     ):
-        if history is None:
-            history = []
-
         if recon_callback is not None and recon_monitor_inputs is None:
             raise ValueError("recon_monitor_inputs must be provided when using recon_callback")
 
@@ -119,11 +111,12 @@ class VariationalAutoencoder:
         if recon_epochs is not None:
             recon_epochs_set = set(int(epoch) for epoch in recon_epochs)
 
+        history = []
         num_samples = len(X_train)
-        total_epochs = start_epoch + epochs
+        total_epochs = epochs
         batch_size = max(1, batch_size)
 
-        for epoch_idx in range(start_epoch, total_epochs):
+        for epoch_idx in range(total_epochs):
             epoch_number = epoch_idx + 1
 
             epoch_loss = 0.0
@@ -165,18 +158,10 @@ class VariationalAutoencoder:
                     f"(Recon: {avg_recon:.6f}, KL: {avg_kl:.6f})"
                 )
 
-            if (
-                checkpoint_path
-                and ((epoch_number) % checkpoint_interval == 0 or epoch_number == total_epochs)
-            ):
-                self.save_checkpoint(checkpoint_path, epoch_number, history)
-
             if recon_callback is not None and recon_monitor_inputs is not None:
                 should_capture = False
                 if recon_epochs_set is not None:
                     should_capture = epoch_number in recon_epochs_set
-                elif checkpoint_interval:
-                    should_capture = (epoch_number % checkpoint_interval == 0) or (epoch_number == total_epochs)
                 else:
                     should_capture = True
 
@@ -280,31 +265,3 @@ class VariationalAutoencoder:
                 grid_samples.append(decoded.flatten())
         return np.array(grid_samples)
 
-    def save_checkpoint(self, filepath, epoch, history):
-        directory = os.path.dirname(filepath)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-
-        payload = {
-            'epoch': np.array(epoch, dtype=np.int64),
-            'history': np.array(history, dtype=np.float32),
-        }
-
-        for idx, layer in enumerate(self._dense_layers):
-            payload[f'W_{idx}'] = layer.weights
-            payload[f'b_{idx}'] = layer.bias
-
-        np.savez(filepath, **payload)
-
-    def load_checkpoint(self, filepath):
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"No se encontró el checkpoint en {filepath}")
-
-        data = np.load(filepath, allow_pickle=True)
-        for idx, layer in enumerate(self._dense_layers):
-            layer.weights = data[f'W_{idx}']
-            layer.bias = data[f'b_{idx}']
-
-        epoch = int(data['epoch']) if 'epoch' in data.files else 0
-        history = data['history'].tolist() if 'history' in data.files else []
-        return epoch, history

@@ -1,5 +1,3 @@
-import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -11,11 +9,6 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.models.autoencoders import VariationalAutoencoder
 from src.models.components.optimizers import Adam
-from src.utils.emoji_processor import (
-    EMOJI_IMAGE_SHAPE,
-    get_default_emoji_labels,
-    load_emoji_dataset,
-)
 from src.utils.photo_processor import load_photo_dataset
 from src.utils.data_analysis import (
     plot_latent_space_generic,
@@ -29,16 +22,8 @@ LEARNING_RATE = 0.00082
 EPOCHS = 10
 LATENT_DIM = 2
 RESULTS_BASE_DIR = Path('./results/ej2')
-CHECKPOINT_BASE_DIR = Path('./saved_models')
-CHECKPOINT_INTERVAL = 10
 DEFAULT_PHOTOS_DIR = Path('data/fotos')
 DEFAULT_PHOTO_SIZE = 100
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Entrena el VAE sobre emojis o fotos personalizadas")
-    parser.add_argument('--dataset', choices=['emoji', 'photos'], default='emoji', help='Dataset a utilizar')
-    return parser.parse_args()
 
 
 def _get_latent_points(vae, dataset, labels=None, max_points=200):
@@ -91,84 +76,39 @@ def _deduplicate_samples(data, labels=None, prefer_label_keys=False):
     return np.stack(unique_samples, axis=0)
 
 
-def _prepare_reconstruction_inputs(dataset_name, x_train, x_test, train_labels, test_labels):
-    recon_source = 'all' if dataset_name == 'photos' else 'test'
-    prefer_label_keys = dataset_name == 'photos'
-    max_items = None if dataset_name == 'photos' else min(16, len(x_test))
-
-    if recon_source == 'train':
-        recon_pool = x_train
-        recon_labels = train_labels
-    elif recon_source == 'all':
-        recon_pool = np.concatenate([x_train, x_test], axis=0)
-        recon_labels = _merge_label_lists(train_labels, test_labels, len(x_train), len(x_test))
-    else:
-        recon_pool = x_test
-        recon_labels = test_labels
-
-    recon_pool = _deduplicate_samples(recon_pool, recon_labels, prefer_label_keys)
-
-    if max_items is not None:
-        recon_pool = recon_pool[:max_items]
-
+def _prepare_reconstruction_inputs(x_train, x_test, train_labels, test_labels):
+    recon_pool = np.concatenate([x_train, x_test], axis=0)
+    recon_labels = _merge_label_lists(train_labels, test_labels, len(x_train), len(x_test))
+    recon_pool = _deduplicate_samples(recon_pool, recon_labels, prefer_label_keys=True)
     return recon_pool
 
 
-def _load_selected_dataset(args):
-    if args.dataset == 'emoji':
-        x_train, x_test = load_emoji_dataset()
-        if x_test is None:
-            x_test = x_train
-        train_labels = get_default_emoji_labels(len(x_train))
-        test_labels = get_default_emoji_labels(len(x_test))
-        image_shape = EMOJI_IMAGE_SHAPE
-        dataset_name = 'emoji'
-    else:
-        x_train, x_test, train_labels, test_labels = load_photo_dataset(
-            folder_path=str(DEFAULT_PHOTOS_DIR),
-            target_size=(DEFAULT_PHOTO_SIZE, DEFAULT_PHOTO_SIZE),
-        )
-        if x_test is None or len(x_test) == 0:
-            x_test = x_train
-            test_labels = train_labels
-        else:
-            test_labels = test_labels
-        image_shape = (DEFAULT_PHOTO_SIZE, DEFAULT_PHOTO_SIZE)
-        dataset_name = 'photos'
+def _load_photo_dataset():
+    x_train, x_test, train_labels, test_labels = load_photo_dataset(
+        folder_path=str(DEFAULT_PHOTOS_DIR),
+        target_size=(DEFAULT_PHOTO_SIZE, DEFAULT_PHOTO_SIZE),
+    )
 
-    return {
-        'x_train': x_train,
-        'x_test': x_test,
-        'train_labels': train_labels,
-        'test_labels': test_labels,
-        'image_shape': image_shape,
-        'dataset_name': dataset_name,
-    }
+    if x_test is None or len(x_test) == 0:
+        x_test = x_train
+        test_labels = train_labels
+
+    return x_train, x_test, train_labels, test_labels
 
 
-def run_vae_with_args(args):
-    dataset_info = _load_selected_dataset(args)
-    x_train = dataset_info['x_train']
-    x_test = dataset_info['x_test']
-    train_labels = dataset_info['train_labels']
-    test_labels = dataset_info['test_labels']
-    image_shape = dataset_info['image_shape']
-    dataset_name = dataset_info['dataset_name']
+def run_photos_vae():
+    x_train, x_test, train_labels, test_labels = _load_photo_dataset()
+    image_shape = (DEFAULT_PHOTO_SIZE, DEFAULT_PHOTO_SIZE)
+    dataset_name = 'photos'
 
     print(
         f"[VAE] Dataset ({dataset_name}) -> train: {len(x_train)}, test: {len(x_test)}"
     )
     print(f"[VAE] Hiperparámetros -> epochs: {EPOCHS}, lr: {LEARNING_RATE}")
 
-    if args.dataset == 'photos':
-        encoder_layers = (256, 128)
-        decoder_layers = (128, 256)
-        latent_dim = LATENT_DIM
-    else:
-        encoder_layers = (128, 64)
-        decoder_layers = (64, 128)
-        latent_dim = LATENT_DIM
-    # ----------------------------------------------------
+    encoder_layers = (256, 128)
+    decoder_layers = (128, 256)
+    latent_dim = LATENT_DIM
 
     optimizer = Adam(learning_rate=LEARNING_RATE)
     vae = VariationalAutoencoder(
@@ -182,18 +122,7 @@ def run_vae_with_args(args):
     results_dir = RESULTS_BASE_DIR / dataset_name
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    checkpoint_path = CHECKPOINT_BASE_DIR / f"{dataset_name}_vae_checkpoint.npz"
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-
-    start_epoch = 0
-    history = []
-    if checkpoint_path.exists():
-        print(f"[VAE] Checkpoint encontrado en {checkpoint_path}. Reanudando...")
-        start_epoch, history = vae.load_checkpoint(checkpoint_path)
-        print(f"[VAE] Continuando desde la época {start_epoch}.")
-
     recon_inputs = _prepare_reconstruction_inputs(
-        dataset_name,
         x_train,
         x_test,
         train_labels,
@@ -202,14 +131,12 @@ def run_vae_with_args(args):
     recon_monitor_inputs = recon_inputs[: min(6, len(recon_inputs))]
     recon_steps_log = []
 
-    total_epochs = start_epoch + EPOCHS
-    if total_epochs <= 0:
-        total_epochs = start_epoch
-    capture_points = min(6, max(1, total_epochs - start_epoch))
+    total_epochs = EPOCHS
+    capture_points = min(6, max(1, total_epochs))
     recon_epoch_schedule = sorted(
         set(
             int(round(value))
-            for value in np.linspace(start_epoch + 1, total_epochs, capture_points)
+            for value in np.linspace(1, total_epochs, capture_points)
         )
     ) if capture_points > 0 else []
 
@@ -225,10 +152,6 @@ def run_vae_with_args(args):
         x_train,
         epochs=EPOCHS,
         verbose=True,
-        checkpoint_path=str(checkpoint_path),
-        checkpoint_interval=CHECKPOINT_INTERVAL,
-        start_epoch=start_epoch,
-        history=history,
         batch_size=64,
         recon_monitor_inputs=recon_monitor_inputs if len(recon_monitor_inputs) > 0 else None,
         recon_callback=_record_recon if len(recon_monitor_inputs) > 0 else None,
@@ -287,4 +210,4 @@ def run_vae_with_args(args):
 
 
 if __name__ == "__main__":
-    run_vae_with_args(parse_args())
+    run_photos_vae()
